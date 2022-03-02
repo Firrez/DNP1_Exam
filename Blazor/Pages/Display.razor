@@ -1,0 +1,120 @@
+﻿@page "/Display"
+@using ModelLibrary.Models
+@using System.Text.Json
+
+@if (_childrenToShow is null)
+{
+    <p>Loading...</p>
+}
+else if (_children.Count == 0)
+{
+    <p>No children in database.</p>
+}
+else
+{
+    <h2>Filter:</h2>
+    <label>Favourite status:</label>
+    <select @onchange="ChangeFavouriteFilter">
+        <option value="null">All toys</option>
+        <option value="True">Favourites only</option>
+        <option value="False">Non-favourites only</option>
+    </select><br/>
+    
+    <label>Gender:</label>
+    <input type="text" @oninput="FilterGender"/>
+    
+    <h2>Children:</h2>
+    foreach (var child in _childrenToShow)
+    {
+        <table class="table my-4">
+            <thead class="thead-light">
+            @($"{child.Name} is a {child.Age} years old {child.Gender}. Their toys include:")
+            </thead>
+            <tbody>
+            <tr>
+                <td class="font-weight-bold">Toy Name</td>
+                <td class="font-weight-bold">Color</td>
+                <td class="font-weight-bold">Is Favourite?</td>
+                <td class="font-weight-bold">Remove?</td>
+            </tr>
+            @foreach (var toy in child.Toys)
+            {
+                if (toy.IsFavourite == FavouriteFilter || FavouriteFilter is null)
+                {
+                    <tr>
+                        <td>@toy.Name</td>
+                        <td>@toy.Color</td>
+                        <td>@toy.IsFavourite</td>
+                        <td>
+                            <button class="btn" @onclick="() => RemoveToyAsync(toy.Name)">
+                                <i class="oi oi-trash" style="color: red"></i>
+                            </button>
+                        </td>
+                    </tr>
+                }
+            }
+            </tbody>
+        </table>
+    }
+}
+
+
+@code {
+    private readonly string _uri = "https://localhost:5003";
+
+    private bool? FavouriteFilter { get; set; }
+    
+    private List<Child> _children;
+    private List<Child> _childrenToShow;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await GetChildrenAsync();
+        _childrenToShow = _children;
+    }
+
+    private async Task GetChildrenAsync()
+    {
+        using HttpClient client = new HttpClient();
+
+        HttpResponseMessage response = await client.GetAsync($"{_uri}/Child");
+
+        if (!response.IsSuccessStatusCode) throw new Exception("Can't get children");
+
+        string childrenAsJson = await response.Content.ReadAsStringAsync();
+        _children = JsonSerializer.Deserialize<List<Child>>(childrenAsJson, new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        });
+    }
+
+    private async void RemoveToyAsync(string toyId)
+    {
+        using HttpClient client = new HttpClient();
+
+        HttpResponseMessage response = await client.DeleteAsync($"{_uri}/Child/Toys/{toyId}");
+        if (!response.IsSuccessStatusCode) throw new Exception("Can't remove toy");
+
+        await GetChildrenAsync();
+        _childrenToShow = _children;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void ChangeFavouriteFilter(ChangeEventArgs arg)
+    {
+        if (arg.Value!.Equals("null") )
+        {
+            FavouriteFilter = null;
+        }
+        else
+        {
+            FavouriteFilter = bool.Parse((string) arg.Value);
+        }
+    }
+
+    private void FilterGender(ChangeEventArgs arg)
+    {
+        var input = (string) arg.Value;
+        _childrenToShow = input is null ? _children : _children.Where(c => c.Gender.ToLower().Contains(input.ToLower())).ToList();
+    }
+}

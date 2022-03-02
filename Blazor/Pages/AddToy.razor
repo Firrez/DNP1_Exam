@@ -1,0 +1,92 @@
+﻿@page "/AddToy"
+@using ModelLibrary.Models
+@using System.Text.Json
+@using System.Text
+@using System.ComponentModel.DataAnnotations
+@inject NavigationManager _navigation
+<h3>Add Toy</h3>
+
+@if (_children is null)
+{
+    <p>Loading...</p>
+}
+else if (_children.Count == 0)
+{
+    <p>No children in database.</p>
+}
+else
+{
+    <EditForm Model="_newToy" OnValidSubmit="AddToyAsync">
+        <DataAnnotationsValidator/>
+        <ValidationSummary/>
+        
+        <label>Owner:</label>
+        <InputSelect @bind-Value="OwnerName">
+            <option value="">Select owner</option>
+            @foreach (var child in _children)
+            {
+                <option value="@child.Name">@child.Name</option>
+            }
+        </InputSelect><br/>
+        
+        <label>Toy Name:</label>
+        <InputText @bind-Value="_newToy.Name"/><br/>
+        
+        <label>Color:</label>
+        <InputText @bind-Value="_newToy.Color"/><br/>
+        
+        <label>Condition:</label>
+        <InputText @bind-Value="_newToy.Condition"/><br/>
+        
+        <label>Favourite toy?</label>
+        <InputCheckbox @bind-Value="_newToy.IsFavourite"/><br/>
+        
+        <button class="btn btn-primary" type="submit">Add Toy</button>
+    </EditForm>
+}
+
+@code {
+    private readonly Toy _newToy = new();
+    private readonly string _uri = "https://localhost:5003";
+
+    [Required, MinLength(1)]
+    private string OwnerName { get; set; }
+    
+    private List<Child> _children;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await GetChildrenAsync();
+    }
+
+    private async Task GetChildrenAsync()
+    {
+        using HttpClient client = new HttpClient();
+
+        HttpResponseMessage response = await client.GetAsync($"{_uri}/Child");
+
+        if (!response.IsSuccessStatusCode) throw new Exception("Can't get children");
+
+        string childrenAsJson = await response.Content.ReadAsStringAsync();
+        _children = JsonSerializer.Deserialize<List<Child>>(childrenAsJson, new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        });
+    }
+
+    private async void AddToyAsync()
+    {
+        using HttpClient client = new HttpClient();
+
+        string toyAsJson = JsonSerializer.Serialize(_newToy);
+        HttpContent content = new StringContent(
+            toyAsJson, Encoding.UTF8, "application/json");
+
+        HttpResponseMessage response = await client.PostAsync(
+            $"{_uri}/Toy/owner/{OwnerName}", content);
+
+        if (!response.IsSuccessStatusCode) throw new Exception("Can't add toy");
+        
+        _navigation.NavigateTo("/display");
+    }
+}
